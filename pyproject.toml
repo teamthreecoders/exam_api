@@ -1,7 +1,25 @@
 [project]
 name = "backend"
 version = "0.1.0"
-description = "Add your description here"
+description = "SSC CGL Mock Test & Analytics Platform backend"
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "fastapi==0.115.6",
+    "uvicorn[standard]==0.34.0",
+    "pydantic==2.10.4",
+    "pydantic-settings==2.7.1",
+    "email-validator==2.2.0",
+    "sqlalchemy==2.0.36",
+    "alembic==1.14.0",
+    "psycopg2-binary==2.9.10",
+    "httpx==0.28.1",
+    "python-dotenv==1.0.1",
+    "python-multipart==0.0.20",
+]
+
+[dependency-groups]
+dev = [
+    "pytest==8.3.4",
+    "pytest-asyncio==0.25.0",
+]
