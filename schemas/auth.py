@@ -66,5 +66,6 @@ class UserProfileResponse(BaseModel):
     first_name: str
     last_name: str | None = None
     is_active: bool
+    role: str = "user"
 
     model_config = {"from_attributes": True}

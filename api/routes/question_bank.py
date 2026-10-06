@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from api.deps import get_current_user
+from api.deps import require_admin
 from database.session import get_db
 from models.question_bank import Question, QuestionBank, QuestionVersion
 from models.section_topic import Section, Topic
@@ -30,7 +30,7 @@ router = APIRouter(prefix="/api/question-bank", tags=["question-bank"])
 def import_bank(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_admin),
 ) -> QuestionBankSummary:
     try:
         payload = json.loads(file.file.read())
@@ -53,7 +53,7 @@ def import_bank(
 
 
 @router.get("/banks", response_model=list[QuestionBankListItem])
-def list_banks(db: Session = Depends(get_db), _: User = Depends(get_current_user)) -> list[QuestionBankListItem]:
+def list_banks(db: Session = Depends(get_db), _: User = Depends(require_admin)) -> list[QuestionBankListItem]:
     """Every imported JSON file, most recent first -- lets a test be scoped to
     exactly one upload (e.g. 'only questions from the set I just imported')
     instead of the whole shared bank."""
@@ -81,7 +81,7 @@ def list_banks(db: Session = Depends(get_db), _: User = Depends(get_current_user
 
 @router.get("/banks/{bank_id}/sections", response_model=list[QuestionBankSectionBreakdown])
 def bank_section_breakdown(
-    bank_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)
+    bank_id: int, db: Session = Depends(get_db), _: User = Depends(require_admin)
 ) -> list[QuestionBankSectionBreakdown]:
     """How many questions this one upload has per section -- lets the
     frontend auto-fill a test's sections/counts straight from a specific
@@ -106,7 +106,7 @@ def bank_section_breakdown(
 def list_sections(
     question_bank_id: int | None = None,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_admin),
 ) -> list[str]:
     """Distinct section names actually present in the bank -- used by
     CreateTestPage's section picker, which needs every section regardless of
@@ -135,7 +135,7 @@ def list_questions(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_admin),
 ) -> QuestionListPage:
     query = (
         db.query(Question, QuestionVersion, Section, Topic)
@@ -190,7 +190,7 @@ def list_questions(
 
 @router.get("/questions/{question_id}", response_model=QuestionDetailOut)
 def get_question_detail(
-    question_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)
+    question_id: int, db: Session = Depends(get_db), _: User = Depends(require_admin)
 ) -> QuestionDetailOut:
     """Full detail for one question -- options and the correct answer --
     fetched on demand when a row is expanded in the browse UI, rather than

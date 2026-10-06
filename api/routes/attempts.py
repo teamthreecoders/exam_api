@@ -4,6 +4,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from api.deps import get_current_user
+from api.routes.tests import can_access_test
 from database.session import get_db
 from exam.attempt_engine import AttemptEngineError
 from exam.attempt_engine import apply_bulk_answers as engine_apply_bulk_answers
@@ -260,7 +261,7 @@ def start_attempt(
     test_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)
 ) -> AttemptStateOut:
     test = db.get(Test, test_id)
-    if test is None or test.created_by_user_id != user.user_id:
+    if test is None or not can_access_test(test, user):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Test not found")
 
     existing = (

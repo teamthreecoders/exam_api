@@ -35,6 +35,8 @@ def get_current_user(
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, exc.msg) from exc
         session_cache.set(token, profile)
 
+    role = "admin" if (profile.get("role_type") or profile.get("role")) == "admin" else "user"
+
     user = db.get(User, profile["user_id"])
     if user is None:
         user = User(
@@ -43,6 +45,7 @@ def get_current_user(
             first_name=profile["first_name"],
             last_name=profile.get("last_name"),
             is_active=profile.get("is_active", True),
+            role=role,
         )
         db.add(user)
     else:
@@ -50,6 +53,13 @@ def get_current_user(
         user.first_name = profile["first_name"]
         user.last_name = profile.get("last_name")
         user.is_active = profile.get("is_active", True)
+        user.role = role
     db.commit()
     db.refresh(user)
+    return user
+
+
+def require_admin(user: User = Depends(get_current_user)) -> User:
+    if user.role != "admin":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Admin access required")
     return user

@@ -15,6 +15,12 @@ class TestMode(str, enum.Enum):
     custom = "custom"
 
 
+class TestVisibility:
+    draft = "draft"
+    published = "published"
+    private = "private"
+
+
 class Test(Base, TimestampMixin):
     """A generated test instance: its question set and section/timing rules
     are fixed at creation time (copied from the exam config and the question
@@ -32,6 +38,11 @@ class Test(Base, TimestampMixin):
     created_by_user_id: Mapped[str] = mapped_column(ForeignKey("users.user_id"), nullable=False)
     randomize_questions: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     randomize_options: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # "draft" (admin-only), "published" (every user can take it) or "private"
+    # (user-generated; only its creator can see/take it).
+    visibility: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="draft", server_default="draft"
+    )
 
     exam_config: Mapped["ExamConfig | None"] = relationship()
     test_sections: Mapped[list["TestSection"]] = relationship(

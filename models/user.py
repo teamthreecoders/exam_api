@@ -22,3 +22,6 @@ class User(Base, TimestampMixin):
     first_name: Mapped[str] = mapped_column(String(255), nullable=False)
     last_name: Mapped[str | None] = mapped_column(String(255))
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # "admin" or "user". Mirrors the `role_type` attribute of the auth service's
+    # /me response, refreshed on every validated session (see api/deps.py).
+    role: Mapped[str] = mapped_column(String(20), nullable=False, default="user", server_default="user")

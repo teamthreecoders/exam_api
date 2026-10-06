@@ -97,6 +97,7 @@ def create_test(
     randomize_questions: bool,
     randomize_options: bool,
     question_bank_id: int | None = None,
+    visibility: str = "draft",
 ) -> Test:
     if not sections:
         raise TestGenerationError("At least one section must be selected")
@@ -115,6 +116,7 @@ def create_test(
         created_by_user_id=created_by_user_id,
         randomize_questions=randomize_questions,
         randomize_options=randomize_options,
+        visibility=visibility,
     )
     db.add(test)
     db.flush()

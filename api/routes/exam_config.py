@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.orm import Session
 
-from api.deps import get_current_user
+from api.deps import require_admin
 from database.session import get_db
 from models.exam_config import ExamConfig, ExamConfigSection
 from models.section_topic import Section
@@ -73,7 +73,7 @@ def create_exam_config(
     payload: ExamConfigCreate,
     response: Response,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_admin),
 ) -> ExamConfigOut:
     """Idempotent: posting a config identical to an existing one returns that
     existing config (200) instead of inserting a duplicate (201)."""
@@ -128,7 +128,7 @@ def create_exam_config(
 
 @router.get("", response_model=list[ExamConfigOut])
 def list_exam_configs(
-    db: Session = Depends(get_db), _: User = Depends(get_current_user)
+    db: Session = Depends(get_db), _: User = Depends(require_admin)
 ) -> list[ExamConfigOut]:
     """Oldest config first; configs identical to an earlier one are left out,
     so duplicates that already exist in the database don't clutter pickers."""
