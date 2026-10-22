@@ -122,3 +122,48 @@ def test_catalog_has_counts_only(setup):
     cat = question_catalog(db=db, _=u1)
     assert cat[0].section == "Quant" and cat[0].question_count == 6
     assert {t.topic: t.question_count for t in cat[0].topics} == {"Percentage": 3, "Algebra": 3}
+
+
+def test_test_names_must_be_unique(setup):
+    db, admin, u1, u2 = setup
+
+    def private(user, name):
+        return create_private_test_route(
+            PrivateTestCreateRequest(
+                name=name,
+                sections=[PrivateTestSectionIn(section="Quant", question_count=2, time_limit_seconds=300)],
+            ),
+            db=db,
+            user=user,
+        )
+
+    private(u1, "Practice 1")
+    # Same user, different case/spacing -> rejected.
+    with pytest.raises(HTTPException) as exc:
+        private(u1, "  practice 1 ")
+    assert exc.value.status_code == 409
+    # Another user's private test doesn't block, and isn't revealed.
+    private(u2, "Practice 1")
+
+    # Admin names: unique among non-private tests, unaffected by private ones.
+    from api.routes.tests import create_test_route
+    from schemas.test import TestCreateRequest, TestSectionSelectionIn
+
+    def admin_test(name):
+        return create_test_route(
+            TestCreateRequest(
+                name=name,
+                mode="custom",
+                sections=[TestSectionSelectionIn(section="Quant", question_count=2, time_limit_seconds=300)],
+            ),
+            db=db,
+            user=admin,
+        )
+
+    admin_test("Practice 1")
+    with pytest.raises(HTTPException) as exc:
+        admin_test("PRACTICE 1")
+    assert exc.value.status_code == 409
+    # A user can no longer reuse a name that is now taken by a visible admin test.
+    with pytest.raises(HTTPException):
+        private(u1, "Practice 1 ")

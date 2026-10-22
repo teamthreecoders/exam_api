@@ -28,6 +28,26 @@ def can_access_test(test: Test, user: User) -> bool:
     return test.visibility == TestVisibility.published or test.created_by_user_id == user.user_id
 
 
+def _ensure_unique_name(db: Session, name: str, user: User) -> str:
+    """Test names are unique, ignoring case and surrounding spaces. Scope is
+    what the caller can see: every non-private test plus their own private
+    ones, so a name never reveals someone else's private test."""
+    name = name.strip()
+    if not name:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Test name is required")
+    taken = (
+        db.query(Test.id)
+        .filter(func.lower(func.trim(Test.name)) == name.lower())
+        .filter(or_(Test.visibility != TestVisibility.private, Test.created_by_user_id == user.user_id))
+        .first()
+    )
+    if taken is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, f'A test named "{name}" already exists. Choose a different name.'
+        )
+    return name
+
+
 def _to_summary(db: Session, test: Test, user: User) -> TestSummary:
     rows = (
         db.query(TestSection, Section)
@@ -64,6 +84,7 @@ def create_test_route(
 ) -> TestSummary:
     """Admin-only. The test starts as a draft; publish it to make it
     available to every user."""
+    name = _ensure_unique_name(db, payload.name, user)
     try:
         mode = TestMode(payload.mode)
     except ValueError as exc:
@@ -76,7 +97,7 @@ def create_test_route(
         test = engine_create_test(
             db,
             created_by_user_id=user.user_id,
-            name=payload.name,
+            name=name,
             exam=payload.exam,
             mode=mode,
             exam_config_id=payload.exam_config_id,
@@ -112,11 +133,12 @@ def create_private_test_route(
     """Any user: pick sections/topics, question count per section, time per
     section and a name. Questions are drawn at random from the whole bank;
     the resulting test is visible only to its creator."""
+    name = _ensure_unique_name(db, payload.name, user)
     try:
         test = engine_create_test(
             db,
             created_by_user_id=user.user_id,
-            name=payload.name.strip(),
+            name=name,
             exam="SSC CGL",
             mode=TestMode.custom,
             exam_config_id=None,
