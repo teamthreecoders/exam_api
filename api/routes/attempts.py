@@ -19,11 +19,13 @@ from models.question_bank import QuestionVersion
 from models.section_topic import Section, Topic
 from models.test import Test, TestQuestion
 from models.user import User
+from services.explanation_service import ExplanationError, ensure_explanation, is_enabled
 from schemas.attempt import (
     AnswerRequest,
     AttemptFullStateOut,
     AttemptResultOut,
     AttemptStateOut,
+    AIExplanationOut,
     AttemptSummaryOut,
     BulkSubmitRequest,
     FullQuestionOut,
@@ -203,6 +205,7 @@ def _build_result(db: Session, attempt: TestAttempt) -> AttemptResultOut:
                 status=qa.status.value,
                 time_spent_seconds=qa.time_spent_seconds,
                 explanation=version.explanation,
+                ai_explanation=version.ai_explanation,
             )
         )
 
@@ -392,6 +395,42 @@ def submit_attempt(
         engine_apply_bulk_answers(db, attempt, payload.answers)
         attempt = engine_submit_attempt(db, attempt)
     return _build_result(db, attempt)
+
+
+@router.post(
+    "/{attempt_id}/questions/{test_question_id}/ai-explanation",
+    response_model=AIExplanationOut,
+)
+def get_ai_explanation(
+    attempt_id: int,
+    test_question_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> AIExplanationOut:
+    """Cached per question version, so each question hits the LLM at most once
+    (usually never, if scripts/generate_explanations.py has been run). Only
+    available once the attempt is finished -- same rule as the result."""
+    attempt = _get_owned_attempt(db, attempt_id, user)
+    attempt = tick(db, attempt)
+    if attempt.status == AttemptStatus.in_progress:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Attempt is still in progress")
+
+    version = (
+        db.query(QuestionVersion)
+        .join(TestQuestion, TestQuestion.question_version_id == QuestionVersion.id)
+        .filter(TestQuestion.id == test_question_id, TestQuestion.test_id == attempt.test_id)
+        .one_or_none()
+    )
+    if version is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Question not found in this attempt")
+
+    if not version.ai_explanation and not is_enabled():
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "AI explanations are not available")
+    try:
+        text = ensure_explanation(db, version)
+    except ExplanationError as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "Couldn't generate an explanation. Try again.") from exc
+    return AIExplanationOut(ai_explanation=text)
 
 
 @router.get("/{attempt_id}/result", response_model=AttemptResultOut)

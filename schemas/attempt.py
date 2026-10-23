@@ -117,6 +117,11 @@ class QuestionResultOut(BaseModel):
     status: str
     time_spent_seconds: int
     explanation: str | None
+    ai_explanation: str | None = None
+
+
+class AIExplanationOut(BaseModel):
+    ai_explanation: str
 
 
 class SectionResultOut(BaseModel):

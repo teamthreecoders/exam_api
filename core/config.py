@@ -1,42 +1,57 @@
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
 
 
 class Settings(BaseSettings):
-    """Centralized app configuration, loaded from environment variables / .env.
+    """Application configuration. Every value comes from backend/.env (or a
+    real environment variable of the same name, e.g. on Vercel) -- there are
+    no defaults, so a missing variable fails at startup instead of silently
+    falling back to something else.
 
     See ../../.env.example for the full list of variables and what they do.
     """
 
-    ENVIRONMENT: str = "development"
+    ENVIRONMENT: str
 
-    # --- Database --------------------------------------------------------
-    DATABASE_URL: str = (
-        "postgresql+psycopg2://ssc_user:ssc_password@localhost:5432/ssc_cgl_platform"
-    )
+    # --- Database ---
+    DATABASE_URL: str
 
-    # --- External authentication service ----------------------------------
+    # --- External authentication service ---
     # This platform does not store credentials. All signup/login/2FA/password
     # flows are proxied to this external auth service; see AUTH_INTEGRATION.md.
-    AUTH_SERVICE_BASE_URL: str = "https://authentication-api-zeta.vercel.app"
-    AUTH_SERVICE_TIMEOUT_SECONDS: float = 10.0
+    AUTH_SERVICE_BASE_URL: str
+    AUTH_SERVICE_TIMEOUT_SECONDS: float
     # How long a validated token's /v1/auth/me result is cached in-memory,
     # to avoid re-validating against the auth service on every autosave call.
-    AUTH_CACHE_TTL_SECONDS: int = 60
+    AUTH_CACHE_TTL_SECONDS: int
 
     # Cookie our backend sets on the browser after proxying a successful
     # login. It carries the auth-service session JWT, but the frontend never
-    # reads or handles that JWT directly (httpOnly). Defaults to insecure for
-    # local HTTP dev -- set true behind HTTPS in production.
-    SESSION_COOKIE_NAME: str = "ssc_cgl_session"
-    SESSION_COOKIE_SECURE: bool = False
-    SESSION_COOKIE_SAMESITE: str = "lax"
+    # reads or handles that JWT directly (httpOnly). Set SECURE=true behind HTTPS.
+    SESSION_COOKIE_NAME: str
+    SESSION_COOKIE_SECURE: bool
+    SESSION_COOKIE_SAMESITE: str
 
-    # Includes both localhost and 127.0.0.1 -- which one the browser actually
-    # uses for the Vite dev server depends on the machine's DNS resolution,
-    # so both are allowed to avoid an avoidable CORS mismatch.
-    CORS_ALLOWED_ORIGINS: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
+    # JSON list, e.g. ["http://localhost:5173","http://127.0.0.1:5173"]
+    CORS_ALLOWED_ORIGINS: list[str]
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    # --- AI explanations ---
+    # Any OpenAI-compatible server (vLLM, Ollama, LM Studio, Together, ...).
+    # Leave LLM_BASE_URL empty (LLM_BASE_URL=) to disable the feature entirely.
+    LLM_BASE_URL: str
+    LLM_API_KEY: str
+    LLM_MODEL: str
+    LLM_TIMEOUT_SECONDS: float
+    # SDK-level retries (with backoff) -- mainly for 429s on free-tier models.
+    LLM_MAX_RETRIES: int
+    # Sends {"reasoning": {"enabled": true}} (OpenRouter-style). Better answers
+    # on maths/reasoning, but slower and costs more tokens.
+    LLM_REASONING: bool
+
+    model_config = SettingsConfigDict(env_file=ENV_FILE, extra="ignore")
 
 
 settings = Settings()

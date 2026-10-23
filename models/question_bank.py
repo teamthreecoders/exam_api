@@ -82,6 +82,10 @@ class QuestionVersion(Base, TimestampMixin):
     # given test is a separate concern — see TestQuestion.option_order.
     correct_option_key: Mapped[str] = mapped_column(String(10), nullable=False)
     explanation: Mapped[str | None] = mapped_column(Text)
+    # LLM-generated explanation, kept apart from the authored `explanation`
+    # so imported solutions are never overwritten. Filled by
+    # scripts/generate_explanations.py or lazily on first request.
+    ai_explanation: Mapped[str | None] = mapped_column(Text)
 
     source: Mapped[str | None] = mapped_column(String(255))
     year: Mapped[int | None] = mapped_column(Integer)

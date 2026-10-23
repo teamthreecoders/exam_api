@@ -1,0 +1,16 @@
+{
+  "test_name": "Sample Set",
+  "exam": "SSC CGL",
+  "questions": [
+    {
+      "question_id": "QA_001",
+      "section": "Quantitative Aptitude",
+      "topic": "Percentage",
+      "difficulty": "easy",
+      "question": "What is 20% of 250?",
+      "options": { "A": "40", "B": "50", "C": "60", "D": "25" },
+      "correct_answer": "B",
+      "explanation": "20% of 250 equals 0.20 × 250 = 50.\n\n1. Convert 20% to decimal: 20/100 = 0.20.\n2. Multiply 0.20 by 250: 0.20 × 250 = 50.\n\nWhy the others are wrong:\nA: 40 is 16% of 250, not 20%.\nC: 60 is 24% of 250.\nD: 25 is 10% of 250."
+    }
+  ]
+}
