@@ -6,9 +6,10 @@ from api.deps import get_current_user, require_admin
 from database.session import get_db
 from exam.test_generator import SectionSelection, TestGenerationError
 from exam.test_generator import create_test as engine_create_test
+from models.attempt import TestAttempt
 from models.question_bank import Question, QuestionVersion
 from models.section_topic import Section, Topic
-from models.test import Test, TestMode, TestSection, TestVisibility
+from models.test import Test, TestMode, TestQuestion, TestSection, TestVisibility
 from models.user import User
 from schemas.test import (
     CatalogSection,
@@ -236,3 +237,27 @@ def unpublish_test(
     test_id: int, db: Session = Depends(get_db), user: User = Depends(require_admin)
 ) -> TestSummary:
     return _set_visibility(db, test_id, TestVisibility.draft, user)
+
+
+@router.delete("/{test_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_test(
+    test_id: int, db: Session = Depends(get_db), _: User = Depends(require_admin)
+) -> None:
+    """Admin-only. Only a draft (unpublished) test can be deleted -- unpublish
+    it first. A test users have already attempted is kept so their results
+    stay intact."""
+    test = db.get(Test, test_id)
+    if test is None or test.visibility == TestVisibility.private:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Test not found")
+    if test.visibility == TestVisibility.published:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "A published test cannot be deleted. Unpublish it first."
+        )
+    if db.query(TestAttempt.id).filter(TestAttempt.test_id == test_id).first() is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "This test has user attempts and cannot be deleted."
+        )
+    db.query(TestQuestion).filter(TestQuestion.test_id == test_id).delete()
+    db.query(TestSection).filter(TestSection.test_id == test_id).delete()
+    db.delete(test)
+    db.commit()

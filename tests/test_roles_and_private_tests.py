@@ -167,3 +167,43 @@ def test_test_names_must_be_unique(setup):
     # A user can no longer reuse a name that is now taken by a visible admin test.
     with pytest.raises(HTTPException):
         private(u1, "Practice 1 ")
+
+
+def test_delete_only_unpublished_test(setup):
+    from api.routes.tests import delete_test, unpublish_test
+
+    db, admin, u1, _ = setup
+    test = create_test(
+        db, created_by_user_id=admin.user_id, name="T", exam="SSC CGL", mode=TestMode.custom,
+        exam_config_id=None, sections=[SectionSelection("Quant", 2, 60)],
+        randomize_questions=False, randomize_options=False, visibility=TestVisibility.draft,
+    )
+    publish_test(test.id, db=db, user=admin)
+    with pytest.raises(HTTPException) as exc:
+        delete_test(test.id, db=db, _=admin)
+    assert exc.value.status_code == 409
+    unpublish_test(test.id, db=db, user=admin)
+    delete_test(test.id, db=db, _=admin)
+    assert db.get(type(test), test.id) is None
+
+
+def test_bank_page_filters(setup):
+    from api.routes.question_bank import bank_filter_options, list_banks_page
+
+    db, admin, *_ = setup
+    pyq = _bank(2)
+    pyq["test_name"] = "CGL PYQ 2025"
+    pyq["exam"] = "SSC CHSL"
+    import_question_bank(db, payload=pyq, source_filename=None)
+
+    def page(**kw):
+        args = dict(exam=None, section=None, pyq=None, q=None, limit=20, offset=0, db=db, _=admin)
+        return list_banks_page(**{**args, **kw})
+
+    assert page().total == 2
+    assert [b.name for b in page(pyq=True).items] == ["CGL PYQ 2025"]
+    assert page(pyq=False).total == 1
+    assert page(exam="SSC CHSL").total == 1
+    assert page(section="Quant").total == 2 and page(section="Nope").total == 0
+    assert page(limit=1).has_more is True
+    assert bank_filter_options(db=db, _=admin).exams == ["SSC CGL", "SSC CHSL"]

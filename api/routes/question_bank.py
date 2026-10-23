@@ -1,7 +1,7 @@
 import json
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
-from sqlalchemy import func
+from sqlalchemy import exists, func, or_
 from sqlalchemy.orm import Session
 
 from api.deps import require_admin
@@ -13,7 +13,9 @@ from question_bank.importer import import_question_bank
 from question_bank.validator import validate_question_bank
 from schemas.question_bank import (
     ImportValidationErrorResponse,
+    QuestionBankFilterOptions,
     QuestionBankListItem,
+    QuestionBankPage,
     QuestionBankSectionBreakdown,
     QuestionBankSummary,
     QuestionDetailOut,
@@ -77,6 +79,98 @@ def list_banks(db: Session = Depends(get_db), _: User = Depends(require_admin)) 
         )
         for bank, count in rows
     ]
+
+
+def _pyq_condition():
+    """A paper counts as a PYQ (previous year question) set when its name says
+    so or any of its questions carries an exam year."""
+    has_year = exists().where(
+        Question.question_bank_id == QuestionBank.id,
+        Question.current_version_id == QuestionVersion.id,
+        QuestionVersion.year.is_not(None),
+    )
+    return or_(QuestionBank.name.ilike("%pyq%"), has_year)
+
+
+@router.get("/banks/page", response_model=QuestionBankPage)
+def list_banks_page(
+    exam: str | None = None,
+    section: str | None = None,
+    pyq: bool | None = None,
+    q: str | None = None,
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+) -> QuestionBankPage:
+    """Paginated, filterable list of uploaded papers for the Question Bank
+    page: by exam name, by a section (type) the paper contains, and PYQ or
+    not (pyq=true / pyq=false; omit for both)."""
+    is_pyq = _pyq_condition()
+    query = db.query(QuestionBank)
+    if exam:
+        query = query.filter(QuestionBank.exam == exam)
+    if q:
+        query = query.filter(QuestionBank.name.ilike(f"%{q}%"))
+    if pyq is True:
+        query = query.filter(is_pyq)
+    elif pyq is False:
+        query = query.filter(~is_pyq)
+    if section:
+        query = query.filter(
+            exists().where(
+                Question.question_bank_id == QuestionBank.id,
+                Question.is_deleted.is_(False),
+                Question.current_version_id == QuestionVersion.id,
+                QuestionVersion.section_id == Section.id,
+                Section.name == section,
+            )
+        )
+
+    total = query.count()
+    banks = (
+        query.order_by(QuestionBank.created_at.desc(), QuestionBank.id.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+    ids = [b.id for b in banks]
+    counts = dict(
+        db.query(Question.question_bank_id, func.count(Question.id))
+        .filter(Question.question_bank_id.in_(ids), Question.is_deleted.is_(False))
+        .group_by(Question.question_bank_id)
+        .all()
+    ) if ids else {}
+    pyq_ids = (
+        {i for (i,) in db.query(QuestionBank.id).filter(QuestionBank.id.in_(ids), is_pyq).all()}
+        if ids
+        else set()
+    )
+    items = [
+        QuestionBankListItem(
+            id=b.id,
+            name=b.name,
+            exam=b.exam,
+            source_filename=b.source_filename,
+            question_count=counts.get(b.id, 0),
+            created_at=b.created_at,
+            is_pyq=b.id in pyq_ids,
+        )
+        for b in banks
+    ]
+    return QuestionBankPage(
+        items=items, total=total, limit=limit, offset=offset, has_more=offset + len(items) < total
+    )
+
+
+@router.get("/banks/filters", response_model=QuestionBankFilterOptions)
+def bank_filter_options(
+    db: Session = Depends(get_db), _: User = Depends(require_admin)
+) -> QuestionBankFilterOptions:
+    """Values for the Question Bank page's exam and type (section) dropdowns."""
+    exams = [e for (e,) in db.query(QuestionBank.exam).distinct().order_by(QuestionBank.exam).all()]
+    sections = [s for (s,) in db.query(Section.name).distinct().order_by(Section.name).all()]
+    return QuestionBankFilterOptions(exams=exams, sections=sections)
 
 
 @router.get("/banks/{bank_id}/sections", response_model=list[QuestionBankSectionBreakdown])

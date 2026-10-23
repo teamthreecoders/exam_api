@@ -50,6 +50,20 @@ class QuestionBankListItem(BaseModel):
     source_filename: str | None
     question_count: int
     created_at: datetime
+    is_pyq: bool = False
+
+
+class QuestionBankPage(BaseModel):
+    items: list[QuestionBankListItem]
+    total: int
+    limit: int
+    offset: int
+    has_more: bool
+
+
+class QuestionBankFilterOptions(BaseModel):
+    exams: list[str]
+    sections: list[str]
 
 
 class QuestionBankSectionBreakdown(BaseModel):
