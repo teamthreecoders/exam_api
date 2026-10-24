@@ -2,6 +2,7 @@ from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from core.config import settings
+from core.timing import timed
 from database.session import get_db
 from models.user import User
 from services.auth_cache import session_cache
@@ -30,7 +31,8 @@ def get_current_user(
     profile = session_cache.get(token)
     if profile is None:
         try:
-            profile = auth_service_client.get_me(token)
+            with timed("auth service get_me (cache miss)"):
+                profile = auth_service_client.get_me(token)
         except AuthServiceError as exc:
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, exc.msg) from exc
         session_cache.set(token, profile)

@@ -9,6 +9,7 @@ import logging
 import os
 import time
 import uuid
+from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 
@@ -50,6 +51,19 @@ def _one_line(statement: str, limit: int = 300) -> str:
 
 
 def instrument_engine(engine: Engine) -> None:
+    @event.listens_for(engine, "do_connect")
+    def _connect(dialect, conn_rec, cargs, cparams):
+        conn_rec.info["connect_start"] = time.perf_counter()
+
+    @event.listens_for(engine, "connect")
+    def _connected(dbapi_conn, conn_rec):
+        ms = (time.perf_counter() - conn_rec.info.pop("connect_start", time.perf_counter())) * 1000
+        stats = _stats.get()
+        sql_logger.warning(
+            "[%s] new DB connection opened in %.2f ms",
+            stats.request_id if stats else "-", ms,
+        )
+
     @event.listens_for(engine, "before_cursor_execute")
     def _before(conn, cursor, statement, parameters, context, executemany):
         conn.info.setdefault("query_start", []).append(time.perf_counter())
@@ -76,6 +90,23 @@ def instrument_engine(engine: Engine) -> None:
         starts = exc_context.connection.info.get("query_start") if exc_context.connection else None
         if starts:
             starts.pop()
+
+
+@contextmanager
+def timed(label: str):
+    """Log how long a block takes (e.g. an external HTTP call) and add it to
+    the request's log line context."""
+    start = time.perf_counter()
+    try:
+        yield
+    finally:
+        ms = (time.perf_counter() - start) * 1000
+        stats = _stats.get()
+        rid = stats.request_id if stats else "-"
+        logger.log(
+            logging.WARNING if ms >= SLOW_QUERY_MS else logging.INFO,
+            "[%s] %s took %.2f ms", rid, label, ms,
+        )
 
 
 def add_request_timing(app: FastAPI) -> None:
