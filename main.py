@@ -3,9 +3,13 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api.routes import attempts, auth, exam_config, question_bank, tests
 from core.config import settings
+from core.timing import add_request_timing, setup_logging
+
+setup_logging()
 
 app = FastAPI(title="SSC CGL Mock Test & Analytics Platform")
 
+add_request_timing(app)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ALLOWED_ORIGINS,

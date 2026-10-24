@@ -53,6 +53,14 @@ Approach: every protected request to our API triggers a validation step:
 
 This keeps autosave-heavy traffic (an API call per answer selection) from hammering the external service while still re-validating periodically.
 
+## Refresh Tokens
+
+The auth service issues a single-use `refresh_token` alongside the session token (`otp/login` without 2FA, and `2fa_verify`) and exposes `POST /v1/auth/refresh` (see its `documentation/API_DOCS.md` §6.10). Each refresh returns a new session token **and** a new refresh token; the old refresh token is spent.
+
+Frontend handling (`lib/session.ts`): both tokens are kept in `tokenStore`. When this backend (or `/me`) answers `401`, the frontend calls `/refresh` once (concurrent callers share one request, since the token is single-use), stores the new pair and replays the request. If the refresh fails with an auth error, the session is cleared and the user is sent to login. This backend needs no changes: it still just validates whatever session token it's given via `/v1/auth/me`. Logout also sends the refresh token so it can't be reused.
+
+Requires the auth service deployed with the `/refresh` endpoint; `JWTREFRESHTOKENEXPIRATIONMINUTES` sets the refresh lifetime (default 30 days).
+
 ## Session Expiry for Long-Running Exams
 
 A full SSC CGL mock test runs 60–100+ minutes, but the auth service's session JWT defaults to a 15-minute expiry (`JWTTOKENEXPIRATIONMINUTES`), and re-login requires a fresh OTP since 2FA is mandatory for all users.
