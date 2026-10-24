@@ -28,13 +28,29 @@ def _unwrap(response: httpx.Response) -> dict:
     return body.get("data") or {}
 
 
+class _Shared:
+    """Lets existing `with self._client() as client` call sites use the shared
+    client without closing it on exit."""
+
+    def __init__(self, client: httpx.Client) -> None:
+        self._c = client
+
+    def __enter__(self) -> httpx.Client:
+        return self._c
+
+    def __exit__(self, *exc) -> None:
+        return None
+
+
 class AuthServiceClient:
     def __init__(self) -> None:
         self._base_url = settings.AUTH_SERVICE_BASE_URL
-        self._timeout = settings.AUTH_SERVICE_TIMEOUT_SECONDS
+        # One long-lived client so keep-alive connections are reused; a fresh
+        # client per call pays a full DNS + TCP + TLS handshake every time.
+        self._http = httpx.Client(base_url=self._base_url, timeout=settings.AUTH_SERVICE_TIMEOUT_SECONDS)
 
-    def _client(self) -> httpx.Client:
-        return httpx.Client(base_url=self._base_url, timeout=self._timeout)
+    def _client(self) -> "_Shared":
+        return _Shared(self._http)
 
     def signup(self, payload: dict) -> dict:
         with self._client() as client:
